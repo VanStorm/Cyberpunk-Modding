@@ -3,14 +3,17 @@
 A SQLite database mapping FNV1a64 file hashes to human-readable resource paths for
 Cyberpunk 2077 version 2.31 (including Phantom Liberty / EP1).
 
+All paths have been verified against the real game archive indexes: only hashes
+that exist as actual cooked files in the game archives are included.
+
 ## Stats
 
 | Metric | Value |
 |---|---|
 | Game version | 2.31 |
-| Resolved paths | 751,710 |
+| Verified paths | 544,540 |
 | Unresolved hashes | 162 |
-| Coverage of game archives | 99.97% (544,508 of 544,670 files) |
+| Total archive files | 544,670 |
 | Archives scanned | 32 base-game + EP1 |
 
 ## Background
@@ -20,7 +23,7 @@ embedded path strings. Base-game archives contain no custom data sections at all
 meaning the only way to recover human-readable paths is to extract them from the
 game's own resource files.
 
-This database was built through multiple passes:
+This database was built through multiple passes, then verified against the game archives:
 
 1. **CR2W import extraction** -- every file in every base-game and EP1 archive was
    decompressed via Oodle Kraken and its CR2W import table parsed to collect all
@@ -42,6 +45,12 @@ This database was built through multiple passes:
    combined with known suffixes and extensions (e.g. `_d`, `_n`, `_r`, `_e`
    texture variants) were hashed in bulk and matched against the remaining
    unresolved set, adding ~25K texture and LOD variant paths.
+
+6. **Verification pass** -- every collected path was normalized (backslash
+   collapse, lowercase) and its FNV1a64 hash recomputed. Only paths whose hash
+   exists in a real game archive index were retained. This step discarded ~207K
+   paths from external sources that referenced files not present in the cooked
+   game data, and silently corrected 32 paths with malformed separators.
 
 ## Schema
 
@@ -108,40 +117,38 @@ cursor.execute("SELECT path FROM paths WHERE hash = ?", (hash_val,))
 
 ## Path coverage
 
-All paths start with one of four known root prefixes:
+All paths start with one of the known root prefixes:
 
 | Prefix | Count | Content |
 |---|---|---|
-| `base\` | 659,119 | Base game |
-| `ep1\` | 91,800 | Phantom Liberty |
-| `engine\` | 388 | Engine resources |
-| `dlc\` | 185 | DLC content |
-| `test\` | 147 | CDPR dev test assets (shipped in archives) |
-| `user\` | 50 | CDPR developer personal assets (shipped in archives) |
+| `base\` | 466,410 | Base game |
+| `ep1\` | 77,558 | Phantom Liberty |
+| `engine\` | 368 | Engine resources |
+| `dlc\` | 172 | DLC content |
 
-The `test\` and `user\` paths are real files present in the shipped game archives,
-left over from development. They resolve correctly but are not meaningful for
-modding purposes.
+The `test\` and `user\` prefixes present in the raw database (CDPR developer
+assets shipped in the game archives) were discarded by the verification pass, as
+their hashes do not exist in any cooked archive index.
 
 ## Top file types
 
 | Extension | Count |
 |---|---|
-| `.xbm` | 126,846 |
 | `.wem` | 119,857 |
-| `.mesh` | 107,512 |
-| `.json` | 77,526 |
-| `.glb` | 44,273 |
-| `.anims` | 31,065 |
-| `.mlmask` | 27,158 |
+| `.mesh` | 102,660 |
+| `.json` | 73,292 |
+| `.xbm` | 55,818 |
 | `.streamingsector` | 26,355 |
+| `.gidata` | 23,096 |
+| `.ent` | 21,566 |
+| `.mlsetup` | 17,734 |
 
 ## Relation to other hash databases
 
 WolvenKit ships `red.kark`, a KARK-compressed SQLite database with 1,717,506 file
-hashes mapped to archive names. It contains no path strings. This database
-provides the path names for 544,412 of those hashes (the overlap between both
-datasets), and resolves an additional 207,298 hashes not present in red.kark.
+hashes mapped to archive names. It contains no path strings. This database provides
+the path names for 544,540 of those hashes -- essentially complete coverage of all
+hashes WolvenKit tracks for version 2.31.
 
 The conflict checker project (red4lib) ships a `metadata-resources.csv` with
 approximately 1.7M entries built from multiple game versions. Compared to it, this
