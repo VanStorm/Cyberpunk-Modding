@@ -4,8 +4,11 @@
 
 A SQLite database mapping 544,540 verified FNV1a64 file hashes to human-readable
 resource paths for Cyberpunk 2077 version 2.31, including all Phantom Liberty (EP1)
-content. All paths have been verified against the real game archive indexes -- only
-hashes that exist as actual cooked files are included.
+content. All paths have been verified against the real game archive indexes.
+
+The database also includes 207,155 unshipped paths -- valid resource paths that
+resolve correctly but are not present in any cooked archive. These represent cut
+content, development-only assets, and files renamed or merged before shipping.
 
 The database is useful for any tool that needs to resolve game file hashes to
 readable paths, such as mod conflict checkers, asset browsers, or modding utilities.

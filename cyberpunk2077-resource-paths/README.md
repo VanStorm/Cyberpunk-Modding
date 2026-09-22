@@ -3,8 +3,10 @@
 A SQLite database mapping FNV1a64 file hashes to human-readable resource paths for
 Cyberpunk 2077 version 2.31 (including Phantom Liberty / EP1).
 
-All paths have been verified against the real game archive indexes: only hashes
-that exist as actual cooked files in the game archives are included.
+All paths have been verified against the real game archive indexes. Paths confirmed
+in the cooked archives are in the `paths` table. Paths that resolve correctly but
+are not present in any archive (cut content, dev-only assets) are preserved in the
+`unshipped` table.
 
 ## Stats
 
@@ -12,6 +14,7 @@ that exist as actual cooked files in the game archives are included.
 |---|---|
 | Game version | 2.31 |
 | Verified paths | 544,540 |
+| Unshipped paths | 207,155 |
 | Unresolved hashes | 162 |
 | Total archive files | 544,670 |
 | Archives scanned | 32 base-game + EP1 |
@@ -47,10 +50,11 @@ This database was built through multiple passes, then verified against the game 
    unresolved set, adding ~25K texture and LOD variant paths.
 
 6. **Verification pass** -- every collected path was normalized (backslash
-   collapse, lowercase) and its FNV1a64 hash recomputed. Only paths whose hash
-   exists in a real game archive index were retained. This step discarded ~207K
-   paths from external sources that referenced files not present in the cooked
-   game data, and silently corrected 32 paths with malformed separators.
+   collapse, lowercase) and its FNV1a64 hash recomputed. Paths whose hash exists
+   in a real game archive index go into the `paths` table. Paths with a valid hash
+   that are not in any archive go into the `unshipped` table (cut content,
+   dev-only assets, or files renamed before shipping). 40 paths with malformed
+   separators were silently corrected during this pass.
 
 ## Schema
 
@@ -82,6 +86,18 @@ Hashes found in game archives that could not be resolved to a path.
 |---|---|---|
 | hash | INTEGER (PK) | FNV1a64 hash, stored as signed int64 |
 | source_archive | TEXT | Archive file the hash was found in |
+
+### unshipped (view: unshipped_paths)
+
+Valid resource paths whose hash does not appear in any cooked game archive. These
+represent cut content, development-only assets, or files that were renamed or
+merged before shipping. They are real CDPR resource paths, but the files are not
+present in the shipped game and cannot be extracted.
+
+| Column | Type | Description |
+|---|---|---|
+| hash | INTEGER (PK) | FNV1a64 hash, stored as signed int64 |
+| path | TEXT | Resource path not present in any archive |
 
 ## Hash algorithm
 
