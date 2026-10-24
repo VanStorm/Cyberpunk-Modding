@@ -1,7 +1,12 @@
 # cyberpunk2077-resource-paths.db
 
+> **Note:** `cyberpunk2077-resource-paths.db` is the legacy 2.31 database, kept
+> for compatibility with tools that already reference it. The latest database is
+> distributed as `cyberpunk2077-resource-paths.7z` and contains 2.5 data with the
+> updated schema described below.
+
 A SQLite database mapping FNV1a64 file hashes to human-readable resource paths for
-Cyberpunk 2077 version 2.31 (including Phantom Liberty / EP1).
+Cyberpunk 2077 (including Phantom Liberty / EP1).
 
 All paths have been verified against the real game archive indexes. Paths confirmed
 in the cooked archives are in the `paths` table. Paths that resolve correctly but
@@ -12,12 +17,12 @@ are not present in any archive (cut content, dev-only assets) are preserved in t
 
 | Metric | Value |
 |---|---|
-| Game version | 2.31 |
-| Verified paths | 544,540 |
-| Unshipped paths | 207,155 |
-| Unresolved hashes | 162 |
-| Total archive files | 544,670 |
-| Archives scanned | 32 base-game + EP1 |
+| Game version | 2.5 |
+| Verified paths | 552,514 |
+| Unshipped paths | 206,278 |
+| Unresolved hashes | 956 |
+| Total archive files | 553,470 |
+| Archives scanned | content + EP1 |
 
 ## Background
 
@@ -30,74 +35,87 @@ This database was built through multiple passes, then verified against the game 
 
 1. **CR2W import extraction** -- every file in every base-game and EP1 archive was
    decompressed via Oodle Kraken and its CR2W import table parsed to collect all
-   referenced resource paths. This alone yielded ~544K paths (~86% coverage).
+   referenced resource paths. This alone yielded ~556K paths (~80% coverage).
 
-2. **External source ingestion** -- additional paths ingested from REDmod tweak
-   files, game scripts, and MlsetupBuilder `materialDB.json` and `tablemodels.json`
-   (44K+ `.glb` model paths).
+2. **External source ingestion** -- additional paths ingested from MlsetupBuilder
+   `materialDB.json` and `tablemodels.json` (44K+ `.glb` model paths) and
+   WolvenKit's `red.kark` dependency database.
 
-3. **Deep body scan** -- full regex scan of decompressed CR2W property/export data
-   (beyond the imports table) found 1,685 additional paths embedded as string
+3. **Deep body scan** -- full regex scan of decompressed CR2W property and export
+   data (beyond the imports table) found additional paths embedded as string
    properties.
 
-4. **WolvenKit JSON exports** -- 38K+ exported `.app`, `.ent`, `.scene`, and
-   `.quest` files were scanned recursively for `DepotPath.$value` references,
-   adding 26K+ further paths.
+4. **WolvenKit JSON exports** -- a set of exported game files was scanned for
+   `DepotPath.$value` references, adding further paths.
 
-5. **Smart resolution** -- GPU-accelerated stem expansion: known path stems
-   combined with known suffixes and extensions (e.g. `_d`, `_n`, `_r`, `_e`
-   texture variants) were hashed in bulk and matched against the remaining
-   unresolved set, adding ~25K texture and LOD variant paths.
+5. **Smart resolution** -- GPU-accelerated stem expansion and sibling inference:
+   known path stems combined with known suffixes and extensions (texture variants,
+   LOD levels) hashed in bulk and matched against the remaining unresolved set.
 
-6. **Verification pass** -- every collected path was normalized (backslash
+6. **Token recombination** -- GPU-accelerated per-directory token recombination:
+   filename tokens extracted from resolved paths recombined (1-6 tokens) and
+   matched against remaining unresolved hashes, including cross-directory token
+   augmentation and numeric range expansion.
+
+7. **Verification pass** -- every collected path was normalized (backslash
    collapse, lowercase) and its FNV1a64 hash recomputed. Paths whose hash exists
    in a real game archive index go into the `paths` table. Paths with a valid hash
    that are not in any archive go into the `unshipped` table (cut content,
-   dev-only assets, or files renamed before shipping). 40 paths with malformed
-   separators were silently corrected during this pass.
+   dev-only assets, or files renamed before shipping).
 
 ## Schema
 
-### paths (view)
-
-Backward-compatible view always pointing to the active version's table. Use this
-for queries unless you need to target a specific game version explicitly.
-
-### paths_2310
+### paths
 
 | Column | Type | Description |
 |---|---|---|
 | hash | INTEGER (PK) | FNV1a64 hash, stored as signed int64 |
 | path | TEXT | Human-readable resource path |
 
-### versions
+Also has index `idx_paths_path` on `path` for reverse lookups (path to hash).
 
-| Column | Type | Description |
-|---|---|---|
-| game_version | TEXT (PK) | Game version string, e.g. `2.31` |
-| paths_table | TEXT | Name of the corresponding paths table |
-| created | TEXT | UTC timestamp when the entry was created |
-
-### unresolved
-
-Hashes found in game archives that could not be resolved to a path.
-
-| Column | Type | Description |
-|---|---|---|
-| hash | INTEGER (PK) | FNV1a64 hash, stored as signed int64 |
-| source_archive | TEXT | Archive file the hash was found in |
-
-### unshipped (view: unshipped_paths)
+### unshipped
 
 Valid resource paths whose hash does not appear in any cooked game archive. These
 represent cut content, development-only assets, or files that were renamed or
 merged before shipping. They are real CDPR resource paths, but the files are not
 present in the shipped game and cannot be extracted.
 
+Also accessible via the `unshipped_paths` view.
+
 | Column | Type | Description |
 |---|---|---|
 | hash | INTEGER (PK) | FNV1a64 hash, stored as signed int64 |
 | path | TEXT | Resource path not present in any archive |
+
+### unresolved
+
+Hashes found in game archives that could not be resolved to a path string.
+
+| Column | Type | Description |
+|---|---|---|
+| hash | INTEGER (PK) | FNV1a64 hash, stored as signed int64 |
+| source_archive | TEXT | Archive file the hash was found in |
+
+### phantom_hashes
+
+Archive index entries with no stored data segments. These are declared in the
+archive index but have no file content -- likely procedural resources, DLC stubs,
+or runtime-generated entries. Empty for version 2.5.
+
+| Column | Type | Description |
+|---|---|---|
+| hash | INTEGER (PK) | FNV1a64 hash, stored as signed int64 |
+| source_archive | TEXT | Archive file the hash was found in |
+
+### versions
+
+| Column | Type | Description |
+|---|---|---|
+| game_version | TEXT (PK) | Game version string, e.g. `2.5` |
+| flattened_at | TEXT | UTC timestamp when the verified DB was produced |
+| paths_added | INTEGER | Paths written from this version |
+| unshipped_added | INTEGER | Unshipped paths from this version |
 
 ## Hash algorithm
 
@@ -129,6 +147,9 @@ def to_signed64(value: int) -> int:
 # Lookup example
 hash_val = to_signed64(fnv1a64("base\\characters\\player\\player.ent"))
 cursor.execute("SELECT path FROM paths WHERE hash = ?", (hash_val,))
+
+# Reverse lookup (path to hash)
+cursor.execute("SELECT hash FROM paths WHERE path = ?", ("base\\characters\\player\\player.ent",))
 ```
 
 ## Path coverage
@@ -137,55 +158,48 @@ All paths start with one of the known root prefixes:
 
 | Prefix | Count | Content |
 |---|---|---|
-| `base\` | 466,410 | Base game |
-| `ep1\` | 77,558 | Phantom Liberty |
-| `engine\` | 368 | Engine resources |
+| `base\` | 474,346 | Base game |
+| `ep1\` | 77,629 | Phantom Liberty |
+| `engine\` | 367 | Engine resources |
 | `dlc\` | 172 | DLC content |
-
-The `test\` and `user\` prefixes present in the raw database (CDPR developer
-assets shipped in the game archives) were discarded by the verification pass, as
-their hashes do not exist in any cooked archive index.
 
 ## Top file types
 
 | Extension | Count |
 |---|---|
-| `.wem` | 119,857 |
-| `.mesh` | 102,660 |
-| `.json` | 73,292 |
-| `.xbm` | 55,818 |
-| `.streamingsector` | 26,355 |
-| `.gidata` | 23,096 |
-| `.ent` | 21,566 |
-| `.mlsetup` | 17,734 |
+| `.wem` | 122,436 |
+| `.mesh` | 105,377 |
+| `.json` | 74,071 |
+| `.xbm` | 56,397 |
+| `.streamingsector` | 26,384 |
+| `.gidata` | 23,097 |
+| `.ent` | 22,002 |
+| `.mlsetup` | 17,867 |
+| `.anims` | 13,991 |
+| `.mi` | 10,579 |
 
 ## Relation to other hash databases
 
 WolvenKit ships `red.kark`, a KARK-compressed SQLite database with 1,717,506 file
 hashes mapped to archive names. It contains no path strings. This database provides
-the path names for 544,540 of those hashes -- essentially complete coverage of all
-hashes WolvenKit tracks for version 2.31.
-
-The conflict checker project (red4lib) ships a `metadata-resources.csv` with
-approximately 1.7M entries built from multiple game versions. Compared to it, this
-database covers 11K more files specific to version 2.31.
+the path names for 552,514 of those hashes -- essentially complete coverage of all
+hashes WolvenKit tracks.
 
 ## License
 
 Released under CC BY 4.0. See LICENSE for details.
 
-**Attribution:** Ultrapunk (https://github.com/Ultrapunk)
+**Attribution:** VanStorm (https://github.com/VanStorm/)
 
 **Acknowledgements:**
 
-- [WolvenKit](https://github.com/WolvenTeam/WolvenKit) -- WolvenKit's JSON export
-  pipeline was used to extract `DepotPath` references from exported game files,
-  contributing ~26K resolved paths. WolvenKit's `red.kark` dependency database
-  provided authoritative archive-to-hash mappings used to identify unresolved
-  hashes and their source archives.
+- [WolvenKit](https://github.com/WolvenKit/) -- WolvenKit's JSON export
+  pipeline was used to extract `DepotPath` references from exported game files.
+  WolvenKit's `red.kark` dependency database provided authoritative archive-to-hash
+  mappings used to identify unresolved hashes and their source archives.
 - [MlsetupBuilder](https://github.com/Neurolinked/MlsetupBuilder) -- MlsetupBuilder's
-  bundled `tablemodels.json` and `materialDB.json` data files contributed ~45K
-  resource paths.
+  bundled `tablemodels.json` and `materialDB.json` data files contributed resource
+  paths.
 
 All path strings are derived from Cyberpunk 2077 game files. CD Projekt RED owns
 all rights to the original game content. This database contains only file path

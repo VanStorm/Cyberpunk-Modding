@@ -1,14 +1,17 @@
 # Cyberpunk 2077 Resource Paths
 
-## cyberpunk2077-resource-paths.db
+## cyberpunk2077-resource-paths.7z
 
-A SQLite database mapping 544,540 verified FNV1a64 file hashes to human-readable
-resource paths for Cyberpunk 2077 version 2.31, including all Phantom Liberty (EP1)
+A SQLite database mapping 552,514 verified FNV1a64 file hashes to human-readable
+resource paths for Cyberpunk 2077 version 2.5, including all Phantom Liberty (EP1)
 content. All paths have been verified against the real game archive indexes.
 
-The database also includes 207,155 unshipped paths -- valid resource paths that
+The database also includes 206,278 unshipped paths -- valid resource paths that
 resolve correctly but are not present in any cooked archive. These represent cut
 content, development-only assets, and files renamed or merged before shipping.
+
+`cyberpunk2077-resource-paths.db` is kept for compatibility with tools that already
+reference it. It contains 2.31 data with an older schema.
 
 The database is useful for any tool that needs to resolve game file hashes to
 readable paths, such as mod conflict checkers, asset browsers, or modding utilities.
